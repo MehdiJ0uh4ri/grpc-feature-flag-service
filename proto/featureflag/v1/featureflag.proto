@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package featureflag.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/mehdi/feature-flag-service/gen/featureflag/v1;featureflagv1";
+
+// FeatureFlagService manages feature flags and evaluates them against
+// runtime contexts (e.g. a user id). It is the reference domain used to
+// demonstrate production-grade gRPC observability patterns.
+service FeatureFlagService {
+  // CreateFlag registers a new feature flag.
+  rpc CreateFlag(CreateFlagRequest) returns (Flag);
+
+  // GetFlag fetches a single flag by key.
+  rpc GetFlag(GetFlagRequest) returns (Flag);
+
+  // ListFlags returns all known flags.
+  rpc ListFlags(ListFlagsRequest) returns (ListFlagsResponse);
+
+  // UpdateFlag mutates an existing flag (enable/disable, rollout %, rules).
+  rpc UpdateFlag(UpdateFlagRequest) returns (Flag);
+
+  // DeleteFlag removes a flag permanently.
+  rpc DeleteFlag(DeleteFlagRequest) returns (DeleteFlagResponse);
+
+  // EvaluateFlag decides whether a flag is enabled for a given evaluation
+  // context (sticky rollout by subject id + explicit targeting rules).
+  rpc EvaluateFlag(EvaluateFlagRequest) returns (EvaluateFlagResponse);
+
+  // WatchFlags streams flag change events as they happen, so subscribers
+  // (e.g. edge caches, SDKs) can react without polling.
+  rpc WatchFlags(WatchFlagsRequest) returns (stream FlagEvent);
+}
+
+message Flag {
+  string key = 1;
+  string description = 2;
+  bool enabled = 3;
+  // rollout_percentage gates the fraction of subjects (0-100) who get
+  // "enabled" treatment when no explicit targeting rule matches.
+  int32 rollout_percentage = 4;
+  // targeting_rules lists subject ids always evaluated as enabled,
+  // regardless of rollout_percentage.
+  repeated string targeting_rules = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message CreateFlagRequest {
+  string key = 1;
+  string description = 2;
+  bool enabled = 3;
+  int32 rollout_percentage = 4;
+  repeated string targeting_rules = 5;
+}
+
+message GetFlagRequest {
+  string key = 1;
+}
+
+message ListFlagsRequest {}
+
+message ListFlagsResponse {
+  repeated Flag flags = 1;
+}
+
+message UpdateFlagRequest {
+  string key = 1;
+  optional bool enabled = 2;
+  optional string description = 3;
+  optional int32 rollout_percentage = 4;
+  repeated string targeting_rules = 5;
+}
+
+message DeleteFlagRequest {
+  string key = 1;
+}
+
+message DeleteFlagResponse {
+  bool deleted = 1;
+}
+
+message EvaluateFlagRequest {
+  string key = 1;
+  // subject_id is the stable id (user id, device id, ...) used for sticky
+  // rollout bucketing.
+  string subject_id = 2;
+}
+
+message EvaluateFlagResponse {
+  string key = 1;
+  bool enabled = 2;
+  // reason explains why the decision was made (e.g. "targeting_rule",
+  // "rollout_percentage", "flag_disabled", "flag_not_found").
+  string reason = 3;
+}
+
+message WatchFlagsRequest {}
+
+enum FlagEventType {
+  FLAG_EVENT_TYPE_UNSPECIFIED = 0;
+  FLAG_EVENT_TYPE_CREATED = 1;
+  FLAG_EVENT_TYPE_UPDATED = 2;
+  FLAG_EVENT_TYPE_DELETED = 3;
+}
+
+message FlagEvent {
+  FlagEventType type = 1;
+  Flag flag = 2;
+}
